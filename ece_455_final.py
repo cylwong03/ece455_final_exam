@@ -213,6 +213,17 @@ def main():
 
       # If no task currently running, run it
       if current_running_task == -1:
+        # Update the variables of the task that is about to run
+        task_list[handle_task_num].exec_time_left = handle_task.exec_time
+        task_list[handle_task_num].time_last_started = current_time_tuple[0]
+
+        # Add the completion time of the newly running task to the list of important times
+        important_times.append([current_time_tuple[0] + task_list[handle_task_num].exec_time, 'E', handle_task_num])
+
+        if DEBUG_LEVEL == 4:
+          print(handle_task_num, "started running")
+
+        # Update the currently running task
         current_running_task = handle_task_num
 
       # If the task currently running is the same task, add to queue
