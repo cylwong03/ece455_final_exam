@@ -7,7 +7,7 @@ import sys
 import math
 
 # Used to control print statements for debugging
-DEBUG_LEVEL = 2
+DEBUG_LEVEL = 3
 
 # List of task objects - note that index corresponds to task number
 task_list = []
@@ -22,14 +22,17 @@ priority_task_num_dict = {}
 class Task:
     def __init__(self, task_num, exec_time, period, deadline):
       # Values initialized at creation (constants)
-      self.task_num = float(task_num)
+      self.task_num = int(task_num)
       self.exec_time = float(exec_time)
       self.period = float(period)
       self.deadline = float(deadline)
       self.priority = 1 / float(period)               # Longer period, lower priority
 
       # Values modified during simulation (dynamic)
-      self.exec_time_left = exec_time
+      self.exec_time_left = float(exec_time)
+      self.time_last_started = float(-1)              # Default value is -1, has not started yet
+      self.num_times_run = int(0)
+      self.times_preempted = int(0)
 
 
 # Validate argument input
@@ -63,6 +66,19 @@ def get_lcm(periods):
     ret = ret // 1000
 
     return ret
+
+
+# Helper function for debugging purposes only - used to print task details
+def print_task(task):
+  print("task_num:", task.task_num,
+        ", exec_time:", task.exec_time,
+        ", period:", task.period,
+        ", deadline:", task.deadline,
+        ", priority:", task.priority,
+        ", exec_time_left:", task.exec_time_left,
+        ", time_last_started:", task.time_last_started,
+        ", num_times_run:", task.num_times_run,
+        ", times_preempted:", task.times_preempted)
 
 
 # Read the input file
@@ -100,7 +116,7 @@ def read_input():
           return tasks
 
       if DEBUG_LEVEL == 1:
-        print("task_num:", index, "exec_time:", data[0], ", period:", data[1], ", deadline:", data[2])
+        print("task_num:", index, ", exec_time:", data[0], ", period:", data[1], ", deadline:", data[2])
 
       # Adds each line as a new Task object to the list of tasks to be returned
       task = Task(index, data[0], data[1], data[2])
@@ -115,7 +131,7 @@ def read_input():
 
     if DEBUG_LEVEL == 1:
       for x in task_list:
-        print(x.task_num, x.exec_time, x.period, x.deadline, x.priority)
+        print_task(x)
       for x in priority_task_num_dict.keys():
         print(x, ":", priority_task_num_dict[x])
 
@@ -144,14 +160,77 @@ def main():
   if DEBUG_LEVEL == 2:
      print(hyperperiod)
 
-  # Repeat for every timestep until the hyperperiod
-  for timestep in range(hyperperiod):
+  # Create a list of "important" timesteps where information must be evaluated
+  # Each element is a tuple of [value, type, task_num]
+  # The type can be 'R' for a release time, 'D' for a deadline, or 'E' for a completed execution
+  # To begin, this includes:
+  #     -> release time of each task, up to the hyperperiod (based on the period)
+  #     -> deadline of each task, up to the hyperperiod
+  # Later, we will add:
+  #     -> times when execution is expected to complete
+  important_times = []
+  for task in task_list:
+     # Determining release times
+    release_time = 0
+    while (release_time < hyperperiod):
+      important_time = [release_time, 'R', task.task_num]
+      important_times.append(important_time)
+      release_time = release_time + task.period
+
+    # Determining deadlines
+    deadline_time = task.deadline
+    while (deadline_time < hyperperiod):
+      important_time = [deadline_time, 'D', task.task_num]
+      important_times.append(important_time)
+      deadline_time = deadline_time + task.deadline
+
+  # Sort the list of important times by timestep (ascending)
+  important_times.sort()
+
+  if DEBUG_LEVEL == 3:
+    print(important_times)
+
+  # Set the task number of the currently running task - default is -1
+  current_running_task = -1
+
+  # Continue until there are no more times in the list of important timesteps
+  while(important_times):
+
+    # Get the next time to be evaluated
+    current_time = important_times.pop(0)
+
+    # Get the task object of the task associated with the event
+    handle_task = task_list[current_time[2]]
+    if DEBUG_LEVEL == 3:
+      print_task(handle_task)
+
+    # Check the type to determine what important task happened
+    if current_time[1] == 'R':
+      # New task has been released
+      # If no task currently running, run it
+      if current_running_task == -1:
+        current_running_task = handle_task.task_num
+      # Check if priority of currently running task is lower - preempt if so
+
+
 
     # Sort the list of priorities
     priority_list.sort()
     if DEBUG_LEVEL == 2:
       print(priority_list)
 
+
+    # # Check the tasks, in order of priority, to see which is ready to execute
+    # for priority in priority_list:
+    #    current_task_num = priority_task_num_dict[priority]
+    #    current_task = task_list[current_task_num]
+
+    #    if DEBUG_LEVEL == 2:
+    #       print_task(current_task)
+
+
+    # Re-sort the list of times
+    important_times.sort()
 
 if __name__ == "__main__":
     main()
