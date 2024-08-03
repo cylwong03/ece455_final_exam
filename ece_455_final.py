@@ -7,13 +7,10 @@ import sys
 import math
 
 # Used to control print statements for debugging
-DEBUG_LEVEL = 3
+DEBUG_LEVEL = 4
 
 # List of task objects - note that index corresponds to task number
 task_list = []
-
-# List of all priorities for easy sorting - index does NOT correspond to task number
-priority_list = []
 
 # Dictionary mapping of task priority to task number, for efficient lookup
 priority_task_num_dict = {}
@@ -126,8 +123,6 @@ def read_input():
       task_list.append(task)
       # Adds the task priority and its number to the dictionary
       priority_task_num_dict[task.priority] = task.task_num
-      # Adds the task priority to the list of all priorities
-      priority_list.append(task.priority)
 
     if DEBUG_LEVEL == 1:
       for x in task_list:
@@ -193,43 +188,74 @@ def main():
   # Set the task number of the currently running task - default is -1
   current_running_task = -1
 
+  # Create the queue of tasks waiting to run
+  # Holds tuples of [priority, task_num]
+  queue = []
+
   # Continue until there are no more times in the list of important timesteps
   while(important_times):
 
     # Get the next time to be evaluated
-    current_time = important_times.pop(0)
+    current_time_tuple = important_times.pop(0)
+
+    if DEBUG_LEVEL == 4:
+      print("currently evaluating timestep: ", current_time_tuple)
 
     # Get the task object of the task associated with the event
-    handle_task = task_list[current_time[2]]
+    handle_task_num = current_time_tuple[2]
+    handle_task = task_list[handle_task_num]
     if DEBUG_LEVEL == 3:
       print_task(handle_task)
 
     # Check the type to determine what important task happened
-    if current_time[1] == 'R':
-      # New task has been released
+    # New task has been released
+    if current_time_tuple[1] == 'R':
+
       # If no task currently running, run it
       if current_running_task == -1:
-        current_running_task = handle_task.task_num
-      # Check if priority of currently running task is lower - preempt if so
+        current_running_task = handle_task_num
 
+      # If the task currently running is the same task, add to queue
+      elif current_running_task == handle_task_num:
+        queue.append([handle_task.priority, handle_task_num])
 
+      # Check if priority of currently running task is higher - add to queue if so
+      elif task_list[current_running_task].priority > handle_task.priority:
+        queue.append([handle_task.priority, handle_task_num])
 
-    # Sort the list of priorities
-    priority_list.sort()
-    if DEBUG_LEVEL == 2:
-      print(priority_list)
+      # Check if priority of currently running task is equal and task number is higher - add to queue if so
+      elif (task_list[current_running_task].priority == handle_task.priority
+            and current_running_task > handle_task_num):
+        queue.append([handle_task.priority, handle_task_num])
 
+      # Otherwise (priority of currently running task is lower or priority is equal and task number is lower), preempt
+      else:
+        # Update the variables of the task to be preempted
+        time_executed = current_time_tuple[0] - task_list[current_running_task].time_last_started
+        task_list[current_running_task].exec_time_left = task_list[current_running_task].exec_time - time_executed
+        task_list[current_running_task].times_preempted = task_list[current_running_task].times_preempted + 1
 
-    # # Check the tasks, in order of priority, to see which is ready to execute
-    # for priority in priority_list:
-    #    current_task_num = priority_task_num_dict[priority]
-    #    current_task = task_list[current_task_num]
+        # If the task to be preempted has not finished, add it to the waiting queue
+        if task_list[current_running_task].exec_time_left > 0:
+          queue.append([task_list[current_running_task].priority], task_list)
 
-    #    if DEBUG_LEVEL == 2:
-    #       print_task(current_task)
+        # Update the variables of the task that is preempting
+        task_list[handle_task_num].exec_time_left = handle_task.exec_time
+        task_list[handle_task_num].time_last_started = current_time_tuple[0]
 
+        # Add the completion time of the newly running task to the list of important times
+        important_times.append([current_time_tuple[0] + task_list[handle_task_num].exec_time, 'E', handle_task_num])
 
-    # Re-sort the list of times
+        if DEBUG_LEVEL == 4:
+          print(current_running_task, "preempted by", handle_task_num)
+
+        # Update the currently running task
+        current_running_task = handle_task_num
+
+    # Sort the priority queue
+    queue.sort()
+
+    # Sort the list of times
     important_times.sort()
 
 if __name__ == "__main__":
