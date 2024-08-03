@@ -157,7 +157,8 @@ def main():
 
   # Create a list of "important" timesteps where information must be evaluated
   # Each element is a tuple of [value, type, task_num]
-  # The type can be 'R' for a release time, 'D' for a deadline, or 'E' for a completed execution
+  # The type can be 0 for a release time, 1 for a completed execution, or 2 for a deadline
+  #     -> this helps enforce ordering - we want to evaluate, in order, release tasks, execution tasks, deadline tasks
   # To begin, this includes:
   #     -> release time of each task, up to the hyperperiod (based on the period)
   #     -> deadline of each task, up to the hyperperiod
@@ -168,14 +169,14 @@ def main():
      # Determining release times
     release_time = 0
     while (release_time < hyperperiod):
-      important_time = [release_time, 'R', task.task_num]
+      important_time = [release_time, 0, task.task_num]
       important_times.append(important_time)
       release_time = release_time + task.period
 
     # Determining deadlines
     deadline_time = task.deadline
     while (deadline_time < hyperperiod):
-      important_time = [deadline_time, 'D', task.task_num]
+      important_time = [deadline_time, 2, task.task_num]
       important_times.append(important_time)
       deadline_time = deadline_time + task.deadline
 
@@ -209,7 +210,7 @@ def main():
 
     # Check the type to determine what important task happened
     # New task has been released
-    if current_time_tuple[1] == 'R':
+    if current_time_tuple[1] == 0:
 
       # If no task currently running, run it
       if current_running_task == -1:
@@ -255,13 +256,31 @@ def main():
         task_list[handle_task_num].time_last_started = current_time_tuple[0]
 
         # Add the completion time of the newly running task to the list of important times
-        important_times.append([current_time_tuple[0] + task_list[handle_task_num].exec_time, 'E', handle_task_num])
+        important_times.append([current_time_tuple[0] + handle_task.exec_time, 'E', handle_task_num])
 
         if DEBUG_LEVEL == 4:
           print(current_running_task, "preempted by", handle_task_num)
 
         # Update the currently running task
         current_running_task = handle_task_num
+
+    # Task has completed execution
+    # -> set exec_time_left to 0
+    # -> set time_last_started to -1
+    # -> increment num_times_run
+    #
+    # -> if queue empty, set currently running to -1
+    # -> otherwise get next task from queue - similar to preemption process
+    # -> do not update time left to execute, since this might be in the queue since it was preempted
+    # -> set time_last_started to current time
+    # -> add expected completion time based on TIME LEFT to important times
+
+
+    # Task deadline reached
+    # -> check which deadline this is by taking floor(current time/deadline)
+    # -> compare with num times run and see if the right number have completed
+    # -> if not, this is not feasible and immediately break and return appropriate output
+
 
     # Sort the priority queue
     queue.sort()
