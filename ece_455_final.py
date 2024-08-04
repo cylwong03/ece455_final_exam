@@ -6,6 +6,9 @@ import os
 import sys
 import math
 
+# Note that by convention, priority is determined by the LOWER VALUE
+# (lower value = higher priority)
+
 # Used to control print statements for debugging
 DEBUG_LEVEL = 4
 
@@ -23,7 +26,7 @@ class Task:
       self.exec_time = float(exec_time)
       self.period = float(period)
       self.deadline = float(deadline)
-      self.priority = 1 / float(period)               # Longer period, lower priority
+      self.priority = float(period)               # Longer period, lower priority
 
       # Values modified during simulation (dynamic)
       self.exec_time_left = float(exec_time)
@@ -152,7 +155,7 @@ def RM_simulation():
 
   # Call helper function to get LCM
   hyperperiod = get_lcm(periods)
-  if DEBUG_LEVEL == 2:
+  if DEBUG_LEVEL == 4:
      print(hyperperiod)
 
   # Create a list of "important" timesteps where information must be evaluated
@@ -175,17 +178,16 @@ def RM_simulation():
   for task in task_list:
      # Determining release times
     release_time = 0
-    while (release_time <= hyperperiod):
+    while (release_time < hyperperiod):
       important_time = [release_time, type_dict["R"], task.task_num]
       important_times.append(important_time)
-      release_time = release_time + task.period
 
-    # Determining deadlines
-    deadline_time = task.deadline
-    while (deadline_time <= hyperperiod):
-      important_time = [deadline_time, type_dict["D"], task.task_num]
+      # Add a deadline for every release time
+      important_time = [release_time + task.deadline, type_dict["D"], task.task_num]
       important_times.append(important_time)
-      deadline_time = deadline_time + task.deadline
+
+      # Increment release time
+      release_time = release_time + task.period
 
   # Sort the list of important times by timestep (ascending)
   important_times.sort()
@@ -229,7 +231,7 @@ def RM_simulation():
         important_times.append([current_time_tuple[0] + task_list[handle_task_num].exec_time, type_dict["E"], handle_task_num])
 
         if DEBUG_LEVEL == 4:
-          print(handle_task_num, "started running")
+          print(handle_task_num, "started running, instance", task_list[handle_task_num].num_times_run)
 
         # Update the currently running task
         current_running_task = handle_task_num
@@ -241,32 +243,38 @@ def RM_simulation():
         if DEBUG_LEVEL == 4:
           print(handle_task_num, "added to queue")
 
-      # Check if priority of currently running task is higher - add to queue if so
-      elif task_list[current_running_task].priority > handle_task.priority:
+      # Check if priority of currently running task is higher (lower) - add incoming to queue if so
+      elif task_list[current_running_task].priority < handle_task.priority:
         queue.append([handle_task.priority, handle_task_num])
 
         if DEBUG_LEVEL == 4:
           print(handle_task_num, "added to queue")
 
-      # Check if priority of currently running task is equal and task number is higher - add to queue if so
+      # Check if priority of currently running task is equal and if number is higher priority (lower) - add to queue if so
       elif (task_list[current_running_task].priority == handle_task.priority
-            and current_running_task > handle_task_num):
+            and current_running_task < handle_task_num):
         queue.append([handle_task.priority, handle_task_num])
 
         if DEBUG_LEVEL == 4:
           print(handle_task_num, "added to queue")
 
-      # Otherwise (priority of currently running task is lower or priority is equal and task number is lower), preempt
+      # Otherwise (priority of currently running task is lower (higher) or priority is equal and task number is lower (higher)), preempt
       else:
         # Update the variables of the task to be preempted
+        # -> if the task was started in the same time step, no need to update anything, since we do not consider this a proper preemption
+        if not (task_list[current_running_task].time_last_started == current_time_tuple[0]):
+          task_list[current_running_task].times_preempted = task_list[current_running_task].times_preempted + 1
+
         time_executed = current_time_tuple[0] - task_list[current_running_task].time_last_started
         task_list[current_running_task].exec_time_left = task_list[current_running_task].exec_time - time_executed
-        task_list[current_running_task].times_preempted = task_list[current_running_task].times_preempted + 1
 
         # If the task to be preempted has not finished, add it to the waiting queue
         if task_list[current_running_task].exec_time_left > 0:
           queue_item = [task_list[current_running_task].priority, current_running_task]
           queue.append(queue_item)
+
+          if DEBUG_LEVEL == 4:
+            print(current_running_task, "being preempted and added to queue with", task_list[current_running_task].exec_time - time_executed, "time left")
 
         # Update the variables of the task that is preempting
         task_list[handle_task_num].exec_time_left = handle_task.exec_time
@@ -281,14 +289,18 @@ def RM_simulation():
         # Update the currently running task
         current_running_task = handle_task_num
 
-    # Task has completed execution
-    elif current_time_tuple[1] == type_dict["E"]:
+    # Task has completed execution AND it's the currently running task (ignore otherwise, it has been preempted)
+    elif current_time_tuple[1] == type_dict["E"] and handle_task_num == current_running_task:
 
       if DEBUG_LEVEL == 4:
-          print(handle_task_num, "finished execution")
+          print(handle_task_num, "finished execution, instance", task_list[handle_task_num].num_times_run + 1)
+
+      # If a task has finished executing, but the hyperperiod is over, return unscheduleable
+      if current_time_tuple[0] > hyperperiod:
+        return 0
 
       # Update the variables of the task that finished executing
-      task_list[handle_task_num].exec_time_left = 0
+      task_list[handle_task_num].exec_time_left = task_list[handle_task_num].exec_time
       task_list[handle_task_num].time_last_started = -1
       task_list[handle_task_num].num_times_run = task_list[handle_task_num].num_times_run + 1
 
@@ -301,6 +313,10 @@ def RM_simulation():
 
       # Otherwise, get the next task from the queue
       else:
+
+        if DEBUG_LEVEL == 4:
+          print("queue:", queue)
+
         next_task_tuple = queue.pop(0)
         next_task_num = next_task_tuple[1]
 
@@ -315,16 +331,21 @@ def RM_simulation():
         current_running_task = next_task_num
 
         if DEBUG_LEVEL == 4:
-          print(current_running_task, "started running")
+          print(current_running_task, "started running, instance", task_list[next_task_num].num_times_run)
 
     # Task deadline reached
     elif current_time_tuple[1] == type_dict["D"]:
 
-      if DEBUG_LEVEL == 4:
-          print(handle_task_num, "deadline reached")
+      # Check which deadline this is by subtracting to get the corresponding release time,
+      # then set to 0 if 0 or take floor(current_time/release_time)
+      corresponding_release_time = current_time_tuple[0] - task_list[handle_task_num].deadline
+      if corresponding_release_time == 0:
+        deadline_num = 0
+      else:
+        deadline_num = current_time_tuple[0] // corresponding_release_time
 
-      # Check which deadline this is by taking floor(current time/deadline)
-      deadline_num = current_time_tuple[0] // task_list[handle_task_num].deadline
+      if DEBUG_LEVEL == 4:
+          print(handle_task_num, "deadline reached, instance", deadline_num)
 
       # Compare with the number of times this task has run
       # -> if the task has not completed the same number of times this deadline has passed,
