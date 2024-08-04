@@ -133,8 +133,8 @@ def read_input():
     return tasks
 
 
-def main():
-  print("Running main.")
+def RM_simulation():
+  print("Running simulation.")
   # Return if args are incorrect
   if not check_args():
      return
@@ -157,26 +157,33 @@ def main():
 
   # Create a list of "important" timesteps where information must be evaluated
   # Each element is a tuple of [value, type, task_num]
-  # The type can be 0 for a release time, 1 for a completed execution, or 2 for a deadline
-  #     -> this helps enforce ordering - we want to evaluate, in order, release tasks, execution tasks, deadline tasks
+  # The type can be 0 for a completed execution, 1 for a released task, or 2 for a deadline
+  #     -> this helps enforce ordering - we want to evaluate, in order, execution tasks, release tasks, deadline tasks
   # To begin, this includes:
   #     -> release time of each task, up to the hyperperiod (based on the period)
   #     -> deadline of each task, up to the hyperperiod
   # Later, we will add:
   #     -> times when execution is expected to complete
   important_times = []
+
+  type_dict = {
+    "E" : 0,
+    "R" : 1,
+    "D" : 2
+  }
+
   for task in task_list:
      # Determining release times
     release_time = 0
-    while (release_time < hyperperiod):
-      important_time = [release_time, 0, task.task_num]
+    while (release_time <= hyperperiod):
+      important_time = [release_time, type_dict["R"], task.task_num]
       important_times.append(important_time)
       release_time = release_time + task.period
 
     # Determining deadlines
     deadline_time = task.deadline
-    while (deadline_time < hyperperiod):
-      important_time = [deadline_time, 2, task.task_num]
+    while (deadline_time <= hyperperiod):
+      important_time = [deadline_time, type_dict["D"], task.task_num]
       important_times.append(important_time)
       deadline_time = deadline_time + task.deadline
 
@@ -210,7 +217,7 @@ def main():
 
     # Check the type to determine what important task happened
     # New task has been released
-    if current_time_tuple[1] == 0:
+    if current_time_tuple[1] == type_dict["R"]:
 
       # If no task currently running, run it
       if current_running_task == -1:
@@ -219,7 +226,7 @@ def main():
         task_list[handle_task_num].time_last_started = current_time_tuple[0]
 
         # Add the completion time of the newly running task to the list of important times
-        important_times.append([current_time_tuple[0] + task_list[handle_task_num].exec_time, 'E', handle_task_num])
+        important_times.append([current_time_tuple[0] + task_list[handle_task_num].exec_time, type_dict["E"], handle_task_num])
 
         if DEBUG_LEVEL == 4:
           print(handle_task_num, "started running")
@@ -231,14 +238,23 @@ def main():
       elif current_running_task == handle_task_num:
         queue.append([handle_task.priority, handle_task_num])
 
+        if DEBUG_LEVEL == 4:
+          print(handle_task_num, "added to queue")
+
       # Check if priority of currently running task is higher - add to queue if so
       elif task_list[current_running_task].priority > handle_task.priority:
         queue.append([handle_task.priority, handle_task_num])
+
+        if DEBUG_LEVEL == 4:
+          print(handle_task_num, "added to queue")
 
       # Check if priority of currently running task is equal and task number is higher - add to queue if so
       elif (task_list[current_running_task].priority == handle_task.priority
             and current_running_task > handle_task_num):
         queue.append([handle_task.priority, handle_task_num])
+
+        if DEBUG_LEVEL == 4:
+          print(handle_task_num, "added to queue")
 
       # Otherwise (priority of currently running task is lower or priority is equal and task number is lower), preempt
       else:
@@ -249,14 +265,15 @@ def main():
 
         # If the task to be preempted has not finished, add it to the waiting queue
         if task_list[current_running_task].exec_time_left > 0:
-          queue.append([task_list[current_running_task].priority], task_list)
+          queue_item = [task_list[current_running_task].priority, current_running_task]
+          queue.append(queue_item)
 
         # Update the variables of the task that is preempting
         task_list[handle_task_num].exec_time_left = handle_task.exec_time
         task_list[handle_task_num].time_last_started = current_time_tuple[0]
 
         # Add the completion time of the newly running task to the list of important times
-        important_times.append([current_time_tuple[0] + handle_task.exec_time, 'E', handle_task_num])
+        important_times.append([current_time_tuple[0] + handle_task.exec_time, type_dict["E"], handle_task_num])
 
         if DEBUG_LEVEL == 4:
           print(current_running_task, "preempted by", handle_task_num)
@@ -265,22 +282,63 @@ def main():
         current_running_task = handle_task_num
 
     # Task has completed execution
-    # -> set exec_time_left to 0
-    # -> set time_last_started to -1
-    # -> increment num_times_run
-    #
-    # -> if queue empty, set currently running to -1
-    # -> otherwise get next task from queue - similar to preemption process
-    # -> do not update time left to execute, since this might be in the queue since it was preempted
-    # -> set time_last_started to current time
-    # -> add expected completion time based on TIME LEFT to important times
+    elif current_time_tuple[1] == type_dict["E"]:
 
+      if DEBUG_LEVEL == 4:
+          print(handle_task_num, "finished execution")
+
+      # Update the variables of the task that finished executing
+      task_list[handle_task_num].exec_time_left = 0
+      task_list[handle_task_num].time_last_started = -1
+      task_list[handle_task_num].num_times_run = task_list[handle_task_num].num_times_run + 1
+
+      # If the queue is empty, set currently running task to -1
+      if not queue:
+        current_running_task = -1
+
+        if DEBUG_LEVEL == 4:
+          print("queue empty, processor idle")
+
+      # Otherwise, get the next task from the queue
+      else:
+        next_task_tuple = queue.pop(0)
+        next_task_num = next_task_tuple[1]
+
+        # Update the variables of the next task to run
+        # -> we do not update exec_time_left since this task may have already executed for a bit
+        task_list[next_task_num].time_last_started = current_time_tuple[0]
+
+        # Add the completion time of the task to run to the list of important times
+        important_times.append([current_time_tuple[0] + task_list[next_task_num].exec_time_left, type_dict["E"], next_task_num])
+
+        # Update the currently running task
+        current_running_task = next_task_num
+
+        if DEBUG_LEVEL == 4:
+          print(current_running_task, "started running")
 
     # Task deadline reached
-    # -> check which deadline this is by taking floor(current time/deadline)
-    # -> compare with num times run and see if the right number have completed
-    # -> if not, this is not feasible and immediately break and return appropriate output
+    elif current_time_tuple[1] == type_dict["D"]:
 
+      if DEBUG_LEVEL == 4:
+          print(handle_task_num, "deadline reached")
+
+      # Check which deadline this is by taking floor(current time/deadline)
+      deadline_num = current_time_tuple[0] // task_list[handle_task_num].deadline
+
+      # Compare with the number of times this task has run
+      # -> if the task has not completed the same number of times this deadline has passed,
+      # -> immediately return that the workload is unscheduleable
+      if deadline_num > task_list[handle_task_num].num_times_run:
+
+        if DEBUG_LEVEL == 4:
+          print(handle_task_num, "missed its deadline - ran", task_list[handle_task_num].num_times_run,
+                "times, expected", deadline_num)
+
+        return 0
+
+      if DEBUG_LEVEL == 4:
+          print(handle_task_num, "met its deadline")
 
     # Sort the priority queue
     queue.sort()
@@ -288,5 +346,22 @@ def main():
     # Sort the list of times
     important_times.sort()
 
+  # The simulation has finished running and no tasks missed their deadlines
+  # Return the number of times each task was preempted
+  return_tuple = []
+  for task in task_list:
+    return_tuple.append(str(task.times_preempted))
+
+  return [1, return_tuple]
+
 if __name__ == "__main__":
-    main()
+
+    ret = RM_simulation()
+
+    if ret:
+      print("1")
+      print(','.join(ret[1]))
+    else:
+      print("0")
+      print("")
+
