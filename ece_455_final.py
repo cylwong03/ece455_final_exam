@@ -2,7 +2,6 @@
 # Caitlin Wong
 # 20901429
 
-import os
 import sys
 import math
 
@@ -10,7 +9,7 @@ import math
 # (lower value = higher priority)
 
 # Used to control print statements for debugging
-DEBUG_LEVEL = 4
+DEBUG_LEVEL = 5
 
 # List of task objects - note that index corresponds to task number
 task_list = []
@@ -265,16 +264,32 @@ def RM_simulation():
         if not (task_list[current_running_task].time_last_started == current_time_tuple[0]):
           task_list[current_running_task].times_preempted = task_list[current_running_task].times_preempted + 1
 
-        time_executed = current_time_tuple[0] - task_list[current_running_task].time_last_started
-        task_list[current_running_task].exec_time_left = task_list[current_running_task].exec_time - time_executed
+          if DEBUG_LEVEL == 4:
+            print(current_running_task, "preempted by", handle_task_num)
 
-        # If the task to be preempted has not finished, add it to the waiting queue
+        time_executed = current_time_tuple[0] - task_list[current_running_task].time_last_started
+        task_list[current_running_task].exec_time_left = task_list[current_running_task].exec_time_left - time_executed
+
+        # If the task to be preempted has not finished:
         if task_list[current_running_task].exec_time_left > 0:
+          # Add it to the waiting queue
           queue_item = [task_list[current_running_task].priority, current_running_task]
           queue.append(queue_item)
 
           if DEBUG_LEVEL == 4:
-            print(current_running_task, "being preempted and added to queue with", task_list[current_running_task].exec_time - time_executed, "time left")
+            print(current_running_task, "added to queue with", task_list[current_running_task].exec_time - time_executed, "time left")
+
+          # Remove its expected completed execution time (will be recalculated when it starts again)
+          removal_idx = -1
+          for time_tuple in important_times:
+            if (time_tuple[1] == type_dict["E"] and time_tuple[2] == current_running_task):
+              removal_idx = important_times.index(time_tuple)
+              break
+          if not removal_idx == -1:
+            popped = important_times.pop(removal_idx)
+
+            if DEBUG_LEVEL == 4:
+              print(current_running_task, "expected execution time of", popped[0], "removed due to preemption")
 
         # Update the variables of the task that is preempting
         task_list[handle_task_num].exec_time_left = handle_task.exec_time
@@ -283,11 +298,11 @@ def RM_simulation():
         # Add the completion time of the newly running task to the list of important times
         important_times.append([current_time_tuple[0] + handle_task.exec_time, type_dict["E"], handle_task_num])
 
-        if DEBUG_LEVEL == 4:
-          print(current_running_task, "preempted by", handle_task_num)
-
         # Update the currently running task
         current_running_task = handle_task_num
+
+        if DEBUG_LEVEL == 4:
+          print(handle_task_num, "started running, instance", task_list[handle_task_num].num_times_run)
 
     # Task has completed execution AND it's the currently running task (ignore otherwise, it has been preempted)
     elif current_time_tuple[1] == type_dict["E"] and handle_task_num == current_running_task:
