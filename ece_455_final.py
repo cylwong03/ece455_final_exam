@@ -136,7 +136,6 @@ def read_input():
 
 
 def RM_simulation():
-  print("Running simulation.")
   # Return if args are incorrect
   if not check_args():
      return
